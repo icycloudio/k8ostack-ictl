@@ -66,7 +66,7 @@ Examples:
 	}
 
 	// Operation flags
-	rootCmd.Flags().Bool("apply", false, "Apply labels defined in the configuration file (default operation)")
+	rootCmd.Flags().Bool("apply", false, "Apply labels defined in the configuration file")
 	rootCmd.Flags().Bool("delete", false, "Remove labels defined in the configuration file")
 
 	// Configuration flags
@@ -105,14 +105,14 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot specify both --apply and --delete operations")
 	}
 
+	// Require explicit operation - no dangerous defaults!
+	if !applyOp && !deleteOp {
+		return fmt.Errorf("operation required: specify either --apply or --delete\n\nExamples:\n  kictl --config %s --apply    # Apply configuration\n  kictl --config %s --delete   # Remove configuration", configFile, configFile)
+	}
+
 	// Config-based mode
 	if configFile == "" {
 		return fmt.Errorf("configuration file is required. Use --config to specify a YAML file, or --generate-config to create a sample")
-	}
-
-	// Default to apply if no operation specified
-	if !applyOp && !deleteOp {
-		applyOp = true
 	}
 
 	// Initialize logger

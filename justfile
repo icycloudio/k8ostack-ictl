@@ -98,37 +98,6 @@ delete-dry: build
     @echo "🧪 Dry-run: Removing labels from {{config_file}}..."
     {{build_dir}}/{{binary_name}} --config {{config_file}} --delete --dry-run --verbose
 
-# Test multi-CRD architecture with CLI precedence
-test-precedence: build gen-multi-config
-    @echo "🔄 Testing CLI precedence with multi-CRD config..."
-    @echo "1. Default config settings:"
-    {{build_dir}}/{{binary_name}} --config {{sample_multi_config}} --apply --dry-run
-    @echo "\n2. CLI override with --dry-run (should show precedence):"
-    {{build_dir}}/{{binary_name}} --config {{sample_multi_config}} --apply --dry-run --verbose
-    @echo "\n3. Testing global CLI flags affect all CRDs:"
-    {{build_dir}}/{{binary_name}} --config {{sample_multi_config}} --apply --dry-run --log-level=debug
-
-# Full test cycle: delete -> apply -> verify
-test-cycle: build
-    @echo "🔄 Running full test cycle..."
-    {{build_dir}}/{{binary_name}} --config {{config_file}} --delete --dry-run
-    {{build_dir}}/{{binary_name}} --config {{config_file}} --apply --dry-run
-    @echo "✅ Test cycle completed"
-
-# Test multi-CRD full cycle
-test-multi-cycle: build gen-multi-config
-    @echo "🔄 Running full multi-CRD test cycle..."
-    {{build_dir}}/{{binary_name}} --config {{sample_multi_config}} --delete --dry-run --verbose
-    {{build_dir}}/{{binary_name}} --config {{sample_multi_config}} --apply --dry-run --verbose
-    @echo "✅ Multi-CRD test cycle completed"
-
-# Test configuration compatibility
-test-compat: build
-    @echo "🔄 Testing configuration compatibility..."
-    @echo "Testing with main cluster config:"
-    {{build_dir}}/{{binary_name}} --config {{config_file}} --apply --dry-run --verbose
-    @echo "✅ Configuration compatibility test completed"
-
 # Development setup
 dev-setup: deps
     @echo "🛠️ Setting up development environment..."
