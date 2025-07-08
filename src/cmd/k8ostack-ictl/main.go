@@ -11,6 +11,7 @@ import (
 	"k8ostack-ictl/internal/kubectl"
 	"k8ostack-ictl/internal/labeler"
 	"k8ostack-ictl/internal/logging"
+	"k8ostack-ictl/internal/vlan"
 
 	"github.com/spf13/cobra"
 )
@@ -96,6 +97,18 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return config.GenerateMultiCRDSampleConfig("sample-multi-config.yaml")
 	}
 
+	// Config-based mode - check FIRST to match test expectations
+	if configFile == "" {
+		return fmt.Errorf("configuration file is required. Use --config to specify a YAML file, or --generate-config to create a sample")
+	}
+
+	// Initialize logger early for tests that expect logger errors
+	logger, err := logging.NewFileLogger("logs", verbose)
+	if err != nil {
+		return fmt.Errorf("failed to initialize logger: %w", err)
+	}
+	defer logger.Close()
+
 	// Get operation flags
 	applyOp, _ := cmd.Flags().GetBool("apply")
 	deleteOp, _ := cmd.Flags().GetBool("delete")
@@ -109,18 +122,6 @@ func runCommand(cmd *cobra.Command, args []string) error {
 	if !applyOp && !deleteOp {
 		return fmt.Errorf("operation required: specify either --apply or --delete\n\nExamples:\n  kictl --config %s --apply    # Apply configuration\n  kictl --config %s --delete   # Remove configuration", configFile, configFile)
 	}
-
-	// Config-based mode
-	if configFile == "" {
-		return fmt.Errorf("configuration file is required. Use --config to specify a YAML file, or --generate-config to create a sample")
-	}
-
-	// Initialize logger
-	logger, err := logging.NewFileLogger("logs", verbose)
-	if err != nil {
-		return fmt.Errorf("failed to initialize logger: %w", err)
-	}
-	defer logger.Close()
 
 	// Load configuration bundle (supports both single and multi-CRD configs)
 	bundle, err := config.LoadMultipleConfigs(configFile)
@@ -210,14 +211,54 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Process VLANs if present (placeholder for future implementation)
+	// Process VLANs if present
 	if bundle.HasVLANs() {
-		logger.Info("🌐 VLAN configuration detected - feature coming soon!")
-		logger.Info(fmt.Sprintf("  Found %d VLAN configurations in %s",
-			len(bundle.VLANs.Spec.VLANs), bundle.VLANs.GetMetadata().Name))
-		// TODO: Implement VLAN service integration
-		// vlanService := vlan.NewService(...)
-		// results, err := vlanService.ConfigureVLANs(ctx, bundle.VLANs)
+		logger.Info("🌐 Processing VLAN configuration...")
+
+		// Initialize kubectl executor (reuse from labeling or create new one)
+		kubectlExecutor := kubectl.NewExecutor(logger)
+
+		// Get final tool configuration from the resolved config
+		tools := bundle.VLANs.GetTools()
+
+		// Initialize VLAN service with resolved configuration
+		vlanService := vlan.NewService(kubectlExecutor, vlan.Options{
+			DryRun:               tools.Nvlan.DryRun,
+			Verbose:              verbose, // CLI verbose always applies
+			ValidateConnectivity: true,    // Default to true for safety
+			PersistentConfig:     false,   // Default to false for safety
+			DefaultInterface:     "eth0",  // Default interface
+			Logger:               logger,
+		})
+
+		// Execute VLAN operation
+		var results *vlan.OperationResults
+		if deleteOp {
+			results, err = vlanService.RemoveVLANs(ctx, bundle.VLANs)
+		} else {
+			results, err = vlanService.ConfigureVLANs(ctx, bundle.VLANs)
+		}
+
+		if err != nil {
+			totalErrors = append(totalErrors, fmt.Errorf("VLAN configuration failed: %w", err))
+		} else {
+			// Verify VLANs if not in dry run mode and operation was apply
+			if !tools.Nvlan.DryRun && applyOp {
+				_, verifyErr := vlanService.VerifyVLANs(ctx, bundle.VLANs)
+				if verifyErr != nil {
+					logger.Warn(fmt.Sprintf("VLAN verification failed: %v", verifyErr))
+				}
+			}
+
+			// Handle any operation errors
+			if len(results.Errors) > 0 {
+				logger.Error("Some VLAN operations failed:")
+				for _, opErr := range results.Errors {
+					logger.Error(fmt.Sprintf("  - %v", opErr))
+				}
+				totalErrors = append(totalErrors, fmt.Errorf("VLAN configuration completed with %d errors", len(results.Errors)))
+			}
+		}
 	}
 
 	// Process Tests if present (placeholder for future implementation)

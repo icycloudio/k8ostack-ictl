@@ -16,16 +16,15 @@ type Executor interface {
 
 	// GetNodeLabels retrieves all labels for a specific node
 	GetNodeLabels(ctx context.Context, nodeName string) (bool, string, error)
+
+	// ExecNodeCommand executes a command on a specific node
+	ExecNodeCommand(ctx context.Context, nodeName, command string) (bool, string, error)
 }
 
-// DryRunExecutor wraps an Executor to provide dry-run capabilities
+// DryRunExecutor extends Executor with dry-run functionality
 type DryRunExecutor interface {
 	Executor
-
-	// SetDryRun enables or disables dry-run mode
 	SetDryRun(enabled bool)
-
-	// IsDryRun returns whether dry-run mode is enabled
 	IsDryRun() bool
 }
 

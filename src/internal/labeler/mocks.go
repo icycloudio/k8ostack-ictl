@@ -50,6 +50,12 @@ func (m *MockDryRunExecutor) IsDryRun() bool {
 	return args.Bool(0)
 }
 
+// ExecNodeCommand mocks node command execution
+func (m *MockDryRunExecutor) ExecNodeCommand(ctx context.Context, nodeName, command string) (bool, string, error) {
+	args := m.Called(ctx, nodeName, command)
+	return args.Bool(0), args.String(1), args.Error(2)
+}
+
 // MockLogger mocks the kubectl.Logger interface for test output verification
 type MockLogger struct {
 	mock.Mock

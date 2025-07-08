@@ -61,14 +61,19 @@ func (r *GlobalResolver) applyToConfig(cfg interface{}) error {
 		return nil
 	}
 
-	// Get the node labeling service config
-	nlabelField := toolsField.FieldByName("Nlabel")
-	if !nlabelField.IsValid() {
-		return fmt.Errorf("Nlabel field not found in Tools struct")
+	// Apply CLI overrides to ALL tool configurations
+	toolNames := []string{"Nlabel", "Nvlan", "Ntest"}
+
+	for _, toolName := range toolNames {
+		toolField := toolsField.FieldByName(toolName)
+		if toolField.IsValid() && toolField.CanSet() {
+			if err := r.applyToToolConfig(toolField); err != nil {
+				return fmt.Errorf("failed to apply overrides to %s: %w", toolName, err)
+			}
+		}
 	}
 
-	// Apply CLI overrides to tool config fields
-	return r.applyToToolConfig(nlabelField)
+	return nil
 }
 
 // applyToToolConfig applies CLI overrides to tool-specific configuration

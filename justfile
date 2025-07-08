@@ -12,6 +12,7 @@ src_dir := "src"
 build_dir := "dist"
 config_file := "prod-infra.yaml"
 sample_multi_config := "sample-multi-config.yaml"
+verbose_flag := ""  # Set to empty space to disable verbose output, use --verbose to enable
 
 # Build the application with multi-CRD support
 build:
@@ -33,6 +34,12 @@ clean:
     -rm -f logs/node_labeling_*.log
     -rm -f {{sample_multi_config}}
     @echo "✅ Cleaned build artifacts"
+
+# Clean up kubectl debug pods created during VLAN operations
+cleanup-pods:
+    @echo "🧹 Cleaning up kubectl debug pods..."
+    -kubectl get pods | grep node-debugger | awk '{print $1}' | xargs kubectl delete pod
+    @echo "✅ Debug pods cleaned up"
 
 # Install dependencies
 deps:
@@ -81,22 +88,27 @@ gen-multi-config: build
 # Apply labels with current config
 apply: build
     @echo "🚀 Applying labels from {{config_file}}..."
-    {{build_dir}}/{{binary_name}} --config {{config_file}} --apply --verbose
+    {{build_dir}}/{{binary_name}} --config {{config_file}} --apply {{verbose_flag}}
 
 # Apply labels in dry-run mode
 apply-dry: build
     @echo "🧪 Dry-run: Applying labels from {{config_file}}..."
-    {{build_dir}}/{{binary_name}} --config {{config_file}} --apply --dry-run --verbose
+    {{build_dir}}/{{binary_name}} --config {{config_file}} --apply --dry-run {{verbose_flag}}
 
 # Remove labels with current config
 delete: build
     @echo "🗑️ Removing labels from {{config_file}}..."
-    {{build_dir}}/{{binary_name}} --config {{config_file}} --delete --verbose
+    {{build_dir}}/{{binary_name}} --config {{config_file}} --delete {{verbose_flag}}
 
 # Remove labels in dry-run mode
 delete-dry: build
     @echo "🧪 Dry-run: Removing labels from {{config_file}}..."
-    {{build_dir}}/{{binary_name}} --config {{config_file}} --delete --dry-run --verbose
+    {{build_dir}}/{{binary_name}} --config {{config_file}} --delete --dry-run {{verbose_flag}}
+
+# Show current node labels for quick verification
+show-labels:
+    @echo "🏷️ Current node labels:"
+    @kubectl get nodes --show-labels
 
 # Development setup
 dev-setup: deps
@@ -169,10 +181,10 @@ demo: build gen-config gen-multi-config
     @echo "   All configs use the updated kictl API domain"
     @echo ""
     @echo "3. 🎛️ Configuration bundle summary:"
-    {{build_dir}}/{{binary_name}} --config {{sample_multi_config}} --apply --dry-run | grep "Configuration bundle"
+    {{build_dir}}/{{binary_name}} --config {{sample_multi_config}} --apply --dry-run {{verbose_flag}} | grep "Configuration bundle"
     @echo ""
     @echo "4. 🔄 Main production configuration:"
-    {{build_dir}}/{{binary_name}} --config {{config_file}} --apply --dry-run | grep "Configuration bundle"
+    {{build_dir}}/{{binary_name}} --config {{config_file}} --apply --dry-run {{verbose_flag}} | grep "Configuration bundle"
     @echo ""
     @echo "✨ Demo completed! Clean code-generated configs with updated API version."
 

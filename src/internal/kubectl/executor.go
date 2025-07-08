@@ -68,6 +68,24 @@ func (e *RealExecutor) GetNodeLabels(ctx context.Context, nodeName string) (bool
 	return e.runCommand(ctx, []string{"get", "node", nodeName, "--show-labels"})
 }
 
+// ExecNodeCommand executes a command on a specific node
+func (e *RealExecutor) ExecNodeCommand(ctx context.Context, nodeName, command string) (bool, string, error) {
+	// Use kubectl debug to execute commands on the node
+	args := []string{
+		"debug", "node/" + nodeName,
+		"--profile=sysadmin",
+		"--image=busybox",
+		"--", "chroot", "/host", "sh", "-c", command,
+	}
+
+	if e.dryRun {
+		e.logger.Debug(fmt.Sprintf("DRY RUN: Would run: kubectl %s", strings.Join(args, " ")))
+		return true, fmt.Sprintf("Command would be executed on node %s: %s", nodeName, command), nil
+	}
+
+	return e.runCommand(ctx, args)
+}
+
 // runCommand executes a kubectl command
 func (e *RealExecutor) runCommand(ctx context.Context, args []string) (bool, string, error) {
 	e.logger.Debug(fmt.Sprintf("Running: kubectl %s", strings.Join(args, " ")))
