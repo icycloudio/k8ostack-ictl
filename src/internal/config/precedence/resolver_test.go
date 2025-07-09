@@ -3,6 +3,7 @@
 package precedence
 
 import (
+	"reflect"
 	"testing"
 
 	"k8ostack-ictl/internal/config"
@@ -304,6 +305,93 @@ func TestGlobalResolver_EdgeCases(t *testing.T) {
 		err := resolver.ApplyGlobalOverrides(emptyBundle)
 
 		// Then: Should succeed without error
+		assert.NoError(t, err)
+	})
+
+	t.Run("setFieldFromFlag_unsupported_type", func(t *testing.T) {
+		// Given: Command with unsupported field type
+		cmd := &cobra.Command{}
+		cmd.Flags().Float64("float-flag", 0.0, "Float flag")
+		cmd.Flags().Set("float-flag", "3.14")
+
+		resolver := NewGlobalResolver(cmd)
+
+		// When: Try to set unsupported field type
+		floatField := reflect.ValueOf(new(float64)).Elem()
+		err := resolver.setFieldFromFlag(floatField, "float-flag")
+
+		// Then: Should return error
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported field type")
+	})
+
+	t.Run("setFieldFromFlag_int_type", func(t *testing.T) {
+		// Given: Command with int flag
+		cmd := &cobra.Command{}
+		cmd.Flags().Int("int-flag", 0, "Int flag")
+		cmd.Flags().Set("int-flag", "42")
+
+		resolver := NewGlobalResolver(cmd)
+
+		// When: Set int field from flag
+		intField := reflect.ValueOf(new(int)).Elem()
+		err := resolver.setFieldFromFlag(intField, "int-flag")
+
+		// Then: Should succeed
+		assert.NoError(t, err)
+		assert.Equal(t, 42, int(intField.Int()))
+	})
+
+	t.Run("setFieldFromFlag_flag_error", func(t *testing.T) {
+		// Given: Command with flag
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("bool-flag", false, "Bool flag")
+
+		resolver := NewGlobalResolver(cmd)
+
+		// When: Try to get non-existent flag
+		boolField := reflect.ValueOf(new(bool)).Elem()
+		err := resolver.setFieldFromFlag(boolField, "non-existent")
+
+		// Then: Should return error
+		assert.Error(t, err)
+	})
+
+	t.Run("applyToToolConfig_unsettable_field", func(t *testing.T) {
+		// Given: Command and resolver
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("dry-run", false, "Enable dry-run mode")
+		cmd.Flags().Set("dry-run", "true")
+
+		resolver := NewGlobalResolver(cmd)
+
+		// When: Apply to unsettable field (create a field that cannot be set)
+		testStruct := struct{ ReadOnly string }{ReadOnly: "test"}
+		unsettableField := reflect.ValueOf(testStruct).Field(0)
+		err := resolver.applyToToolConfig(unsettableField)
+
+		// Then: Should return error
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "tool config is not settable")
+	})
+
+	t.Run("applyToConfig_no_tools_field", func(t *testing.T) {
+		// Given: Command and resolver
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("dry-run", false, "Enable dry-run mode")
+		cmd.Flags().Set("dry-run", "true")
+
+		resolver := NewGlobalResolver(cmd)
+
+		// Create a config without Tools field
+		configWithoutTools := &struct {
+			Name string
+		}{Name: "test"}
+
+		// When: Apply to config without Tools field
+		err := resolver.applyToConfig(configWithoutTools)
+
+		// Then: Should handle gracefully
 		assert.NoError(t, err)
 	})
 }

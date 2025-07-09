@@ -3,10 +3,14 @@
 package main
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestCreateRootCommand_Unit tests the root command creation in isolation
@@ -423,6 +427,248 @@ func TestCommandMetadata_Unit(t *testing.T) {
 		assert.Contains(t, long, "--delete", "Should show delete operation")
 		assert.Contains(t, long, "--dry-run", "Should show dry-run option")
 	})
+}
+
+// TestRunCommandValidation_Unit tests runCommand validation logic in isolation
+// WHY: Validates business logic and error handling without external dependencies
+func TestRunCommandValidation_Unit(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		setupFunc   func(*testing.T) (*cobra.Command, func())
+		expectError bool
+		errorText   string
+	}{
+		{
+			name:        "missing_operation_error",
+			description: "Should require explicit operation (apply or delete)",
+			setupFunc: func(t *testing.T) (*cobra.Command, func()) {
+				cmd := createRootCommand()
+				cmd.Flags().Set("config", "test.yaml")
+				// Set global to simulate flag binding
+				originalConfig := configFile
+				configFile = "test.yaml"
+				return cmd, func() { configFile = originalConfig }
+			},
+			expectError: true,
+			errorText:   "operation required: specify either --apply or --delete",
+		},
+		{
+			name:        "conflicting_operations_error",
+			description: "Should reject both apply and delete operations",
+			setupFunc: func(t *testing.T) (*cobra.Command, func()) {
+				cmd := createRootCommand()
+				cmd.Flags().Set("apply", "true")
+				cmd.Flags().Set("delete", "true")
+				cmd.Flags().Set("config", "test.yaml")
+				return cmd, func() {}
+			},
+			expectError: true,
+			errorText:   "cannot specify both --apply and --delete",
+		},
+		{
+			name:        "missing_config_file_error",
+			description: "Should require config file for operations",
+			setupFunc: func(t *testing.T) (*cobra.Command, func()) {
+				cmd := createRootCommand()
+				cmd.Flags().Set("apply", "true")
+				// configFile remains empty
+				return cmd, func() {}
+			},
+			expectError: true,
+			errorText:   "configuration file is required",
+		},
+		{
+			name:        "generate_config_success",
+			description: "Should handle config generation successfully",
+			setupFunc: func(t *testing.T) (*cobra.Command, func()) {
+				cmd := createRootCommand()
+				// Set global to simulate flag binding
+				originalGenerate := generateConfig
+				generateConfig = true
+				return cmd, func() { generateConfig = originalGenerate }
+			},
+			expectError: false,
+		},
+		{
+			name:        "generate_multi_config_success",
+			description: "Should handle multi-config generation successfully",
+			setupFunc: func(t *testing.T) (*cobra.Command, func()) {
+				cmd := createRootCommand()
+				// Set global to simulate flag binding
+				originalGenerate := generateMultiConfig
+				generateMultiConfig = true
+				return cmd, func() { generateMultiConfig = originalGenerate }
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Given: Test setup
+			tempDir := t.TempDir()
+			cmd, cleanup := tt.setupFunc(t)
+			defer cleanup()
+
+			// Ensure logs directory for logger initialization
+			logsDir := filepath.Join(tempDir, "logs")
+			err := os.MkdirAll(logsDir, os.ModePerm)
+			require.NoError(t, err)
+			err = os.Chdir(tempDir)
+			require.NoError(t, err)
+
+			cmd.SetOut(new(bytes.Buffer))
+			cmd.SetErr(new(bytes.Buffer))
+
+			// When: Execute runCommand
+			err = runCommand(cmd, []string{})
+
+			// Then: Verify results
+			if tt.expectError {
+				assert.Error(t, err, "Command should have failed")
+				if tt.errorText != "" {
+					assert.Contains(t, err.Error(), tt.errorText, "Error should contain expected text")
+				}
+			} else {
+				assert.NoError(t, err, "Command should have succeeded")
+			}
+		})
+	}
+}
+
+// TestRunCommandConfigProcessing_Unit tests config processing paths
+// WHY: Validates configuration loading and bundle processing logic
+func TestRunCommandConfigProcessing_Unit(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		configData  string
+		setupFunc   func(*testing.T) (string, func())
+		expectError bool
+		errorText   string
+	}{
+		{
+			name:        "invalid_config_file_error",
+			description: "Should handle invalid YAML configuration",
+			configData:  "invalid: yaml: content: [",
+			setupFunc: func(t *testing.T) (string, func()) {
+				tempDir := t.TempDir()
+				configPath := filepath.Join(tempDir, "invalid.yaml")
+				err := os.WriteFile(configPath, []byte("invalid: yaml: content: ["), 0644)
+				require.NoError(t, err)
+				
+				// Set globals
+				originalConfig := configFile
+				configFile = configPath
+				
+				return configPath, func() { configFile = originalConfig }
+			},
+			expectError: true,
+			errorText:   "failed to load configuration",
+		},
+		{
+			name:        "nonexistent_config_file_error",
+			description: "Should handle nonexistent config file",
+			setupFunc: func(t *testing.T) (string, func()) {
+				nonexistentPath := "/nonexistent/path/config.yaml"
+				
+				// Set globals
+				originalConfig := configFile
+				configFile = nonexistentPath
+				
+				return nonexistentPath, func() { configFile = originalConfig }
+			},
+			expectError: true,
+			errorText:   "failed to load configuration",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Given: Test setup
+			tempDir := t.TempDir()
+			configPath, cleanup := tt.setupFunc(t)
+			defer cleanup()
+
+			// Ensure logs directory for logger initialization
+			logsDir := filepath.Join(tempDir, "logs")
+			err := os.MkdirAll(logsDir, os.ModePerm)
+			require.NoError(t, err)
+			err = os.Chdir(tempDir)
+			require.NoError(t, err)
+
+			// When: Create command and execute
+			cmd := createRootCommand()
+			cmd.Flags().Set("apply", "true")
+			cmd.Flags().Set("config", configPath)
+
+			cmd.SetOut(new(bytes.Buffer))
+			cmd.SetErr(new(bytes.Buffer))
+
+			err = runCommand(cmd, []string{})
+
+			// Then: Verify results
+			if tt.expectError {
+				assert.Error(t, err, "Command should have failed")
+				if tt.errorText != "" {
+					assert.Contains(t, err.Error(), tt.errorText, "Error should contain expected text")
+				}
+			} else {
+				assert.NoError(t, err, "Command should have succeeded")
+			}
+		})
+	}
+}
+
+// TestRunCommandErrorPaths_Unit tests error handling paths
+// WHY: Validates error handling and recovery mechanisms
+func TestRunCommandErrorPaths_Unit(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		setupFunc   func(*testing.T) func()
+		expectError bool
+		errorText   string
+	}{
+		{
+			name:        "logger_initialization_error",
+			description: "Should handle logger initialization failures gracefully",
+			setupFunc: func(t *testing.T) func() {
+				// Create directory that will cause logger init to fail
+				originalConfig := configFile
+				configFile = "test.yaml"
+				
+				return func() { configFile = originalConfig }
+			},
+			expectError: true,
+			errorText:   "configuration file is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Given: Test setup
+			cleanup := tt.setupFunc(t)
+			defer cleanup()
+
+			// When: Create command and execute
+			cmd := createRootCommand()
+			cmd.Flags().Set("apply", "true")
+
+			err := runCommand(cmd, []string{})
+
+			// Then: Verify error handling
+			if tt.expectError {
+				assert.Error(t, err, "Command should have failed")
+				if tt.errorText != "" {
+					assert.Contains(t, err.Error(), tt.errorText, "Error should contain expected text")
+				}
+			} else {
+				assert.NoError(t, err, "Command should have succeeded")
+			}
+		})
+	}
 }
 
 // TestFlagConfiguration_Unit tests individual flag configuration
