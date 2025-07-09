@@ -45,4 +45,4 @@ sample*.yaml
 prod-infra.yaml
 
 # Other
-docs/
+doc_archive/

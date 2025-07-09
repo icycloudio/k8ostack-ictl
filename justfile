@@ -12,7 +12,8 @@ src_dir := "src"
 build_dir := "dist"
 config_file := "prod-infra.yaml"
 sample_multi_config := "sample-multi-config.yaml"
-verbose_flag := ""  # Set to empty space to disable verbose output, use --verbose to enable
+verbose_flag := "--verbose"  # Set to empty space to disable verbose output, use --verbose to enable
+head_n_count := "20"
 
 # Build the application with multi-CRD support
 build:
@@ -180,8 +181,9 @@ demo: build gen-config gen-multi-config
     @echo "2. 🔍 API Version: openstack.kictl.icycloud.io/v1"
     @echo "   All configs use the updated kictl API domain"
     @echo ""
-    @echo "3. 🎛️ Configuration bundle summary:"
-    {{build_dir}}/{{binary_name}} --config {{sample_multi_config}} --apply --dry-run {{verbose_flag}} | grep "Configuration bundle"
+    @echo "3. 🎛️ Configuration bundle sample (first {{head_n_count}} lines):"
+    @echo
+    @head -n {{head_n_count}} {{sample_multi_config}}
     @echo ""
     @echo "4. 🔄 Main production configuration:"
     {{build_dir}}/{{binary_name}} --config {{config_file}} --apply --dry-run {{verbose_flag}} | grep "Configuration bundle"
