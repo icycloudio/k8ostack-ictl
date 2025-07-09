@@ -169,6 +169,10 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 		// Initialize kubectl executor
 		kubectlExecutor := kubectl.NewExecutor(logger)
+		// Speed up polling for tests
+		if os.Getenv("KICTL_TEST_MODE") == "true" {
+			kubectlExecutor.SetPollingInterval(0)
+		}
 
 		// Get final tool configuration from the resolved config
 		tools := bundle.NodeLabels.GetTools()
@@ -217,6 +221,10 @@ func runCommand(cmd *cobra.Command, args []string) error {
 
 		// Initialize kubectl executor (reuse from labeling or create new one)
 		kubectlExecutor := kubectl.NewExecutor(logger)
+		// Speed up polling for tests
+		if os.Getenv("KICTL_TEST_MODE") == "true" {
+			kubectlExecutor.SetPollingInterval(0)
+		}
 
 		// Get final tool configuration from the resolved config
 		tools := bundle.VLANs.GetTools()

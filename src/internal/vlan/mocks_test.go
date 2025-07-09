@@ -3,6 +3,7 @@ package vlan
 
 import (
 	"context"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 )
@@ -65,6 +66,11 @@ func (m *MockDryRunExecutor) SetDryRun(enabled bool) {
 func (m *MockDryRunExecutor) IsDryRun() bool {
 	args := m.Called()
 	return args.Bool(0)
+}
+
+// SetPollingInterval mocks the polling interval configuration
+func (m *MockDryRunExecutor) SetPollingInterval(interval time.Duration) {
+	m.Called(interval)
 }
 
 // MockLogger mocks the kubectl.Logger interface for test output verification

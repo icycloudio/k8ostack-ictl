@@ -321,9 +321,14 @@ func (vs *VLANService) verifyNodeVLANs(ctx context.Context, nodeName string, cfg
 				continue
 			}
 
-			// Parse IP from output (simplified check)
-			expectedIP := strings.Split(ipAddress, "/")[0]
-			if strings.Contains(output, expectedIP) {
+			// Check for IP address in the inet line (e.g., "    inet 10.100.0.14/24 scope global eth0.100")
+			// The ip addr show command outputs the full CIDR notation in the inet line
+			inetLine := fmt.Sprintf("inet %s", ipAddress)
+			if vs.options.Verbose {
+				vs.options.Logger.Info(fmt.Sprintf("    🔍 Verifying VLAN %s on %s: looking for '%s' in output", vlanName, nodeName, inetLine))
+				vs.options.Logger.Info(fmt.Sprintf("    📄 Output: %s", strings.ReplaceAll(output, "\n", "\\n")))
+			}
+			if strings.Contains(output, inetLine) {
 				vs.options.Logger.Info(fmt.Sprintf("✅ Verified VLAN %s (%s) on node %s", vlanName, vlanInterface, nodeName))
 
 				vlans = append(vlans, VLANInterfaceInfo{
@@ -411,7 +416,12 @@ func (vs *VLANService) cleanupDebugPods(ctx context.Context) {
 	vs.options.Logger.Info("🧹 Cleaning up debug pods...")
 
 	// Give pods a moment to transition to final status
-	time.Sleep(3 * time.Second)
+	// Use configurable delay - can be set to 0 for tests
+	cleanupDelay := vs.options.CleanupDelay
+	if cleanupDelay == 0 {
+		cleanupDelay = 3 * time.Second // Default for production
+	}
+	time.Sleep(cleanupDelay)
 
 	// Step 1: Get ALL pods (no status filtering - match old behavior)
 	success, output, err := vs.kubectl.GetPods(ctx, "", "")

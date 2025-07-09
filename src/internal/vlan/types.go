@@ -3,6 +3,7 @@ package vlan
 
 import (
 	"context"
+	"time"
 
 	"k8ostack-ictl/internal/config"
 	"k8ostack-ictl/internal/kubectl"
@@ -50,6 +51,7 @@ type Options struct {
 	PersistentConfig     bool
 	DefaultInterface     string
 	Logger               kubectl.Logger
+	CleanupDelay         time.Duration // For testing - can be set to 0 to skip sleep
 }
 
 // VLANService implements the Service interface

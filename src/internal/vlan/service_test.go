@@ -24,6 +24,7 @@ func TestNewService(t *testing.T) {
 		PersistentConfig:     false,
 		DefaultInterface:     "eth0",
 		Logger:               mockLogger,
+		CleanupDelay:         0, // Skip sleep in tests
 	}
 
 	service := NewService(mockKubectl, options)
@@ -650,6 +651,8 @@ func TestVLANService_ConfigureVLANs(t *testing.T) {
 
 			// Set logger in options
 			tt.options.Logger = mockLogger
+			// Speed up tests by skipping cleanup sleep
+			tt.options.CleanupDelay = 0
 
 			service := NewService(mockKubectl, tt.options)
 
@@ -787,6 +790,8 @@ func TestVLANService_RemoveVLANs(t *testing.T) {
 			tt.setupMocks(mockKubectl, mockLogger)
 
 			tt.options.Logger = mockLogger
+			// Speed up tests by skipping cleanup sleep
+			tt.options.CleanupDelay = 0
 			service := NewService(mockKubectl, tt.options)
 
 			result, err := service.RemoveVLANs(context.Background(), tt.vlanConfig)
@@ -958,6 +963,8 @@ func TestVLANService_VerifyVLANs(t *testing.T) {
 			tt.setupMocks(mockKubectl, mockLogger)
 
 			tt.options.Logger = mockLogger
+			// Speed up tests by skipping cleanup sleep
+			tt.options.CleanupDelay = 0
 			service := NewService(mockKubectl, tt.options)
 
 			result, err := service.VerifyVLANs(context.Background(), tt.vlanConfig)

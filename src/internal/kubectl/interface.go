@@ -1,7 +1,10 @@
 // Package kubectl provides interfaces and implementations for Kubernetes operations
 package kubectl
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Executor defines the interface for executing kubectl commands
 type Executor interface {
@@ -32,6 +35,7 @@ type DryRunExecutor interface {
 	Executor
 	SetDryRun(enabled bool)
 	IsDryRun() bool
+	SetPollingInterval(interval time.Duration)
 }
 
 // Logger defines the interface for logging kubectl operations

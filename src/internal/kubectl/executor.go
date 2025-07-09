@@ -4,20 +4,24 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
+	"time"
 )
 
 // RealExecutor implements the Executor interface using actual kubectl commands
 type RealExecutor struct {
-	logger Logger
-	dryRun bool
+	logger         Logger
+	dryRun         bool
+	pollingInterval time.Duration
 }
 
 // NewExecutor creates a new kubectl executor
 func NewExecutor(logger Logger) DryRunExecutor {
 	return &RealExecutor{
-		logger: logger,
-		dryRun: false,
+		logger:         logger,
+		dryRun:         false,
+		pollingInterval: 1 * time.Second, // Default polling interval
 	}
 }
 
@@ -29,6 +33,11 @@ func (e *RealExecutor) SetDryRun(enabled bool) {
 // IsDryRun returns whether dry-run mode is enabled
 func (e *RealExecutor) IsDryRun() bool {
 	return e.dryRun
+}
+
+// SetPollingInterval sets the polling interval for waiting for pod completion
+func (e *RealExecutor) SetPollingInterval(interval time.Duration) {
+	e.pollingInterval = interval
 }
 
 // GetNode retrieves information about a specific node
@@ -68,7 +77,7 @@ func (e *RealExecutor) GetNodeLabels(ctx context.Context, nodeName string) (bool
 	return e.runCommand(ctx, []string{"get", "node", nodeName, "--show-labels"})
 }
 
-// ExecNodeCommand executes a command on a specific node
+// ExecNodeCommand executes a command on a specific node using kubectl debug
 func (e *RealExecutor) ExecNodeCommand(ctx context.Context, nodeName, command string) (bool, string, error) {
 	// Use kubectl debug to execute commands on the node
 	args := []string{
@@ -83,7 +92,26 @@ func (e *RealExecutor) ExecNodeCommand(ctx context.Context, nodeName, command st
 		return true, fmt.Sprintf("Command would be executed on node %s: %s", nodeName, command), nil
 	}
 
-	return e.runCommand(ctx, args)
+	// Execute kubectl debug command
+	_, output, err := e.runCommand(ctx, args)
+	if err != nil {
+		return false, output, err
+	}
+
+	// kubectl debug is asynchronous and only returns pod creation message
+	// We need to extract the pod name and get its logs
+	podName := e.extractPodNameFromDebugOutput(output)
+	if podName == "" {
+		return false, output, fmt.Errorf("failed to extract pod name from debug output: %s", output)
+	}
+
+	// Wait for pod to complete and get logs
+	logOutput, err := e.waitForPodLogsWithTimeout(ctx, podName, 30*time.Second)
+	if err != nil {
+		return false, logOutput, err
+	}
+
+	return true, logOutput, nil
 }
 
 // GetPods retrieves pods with optional filtering
@@ -128,4 +156,62 @@ func (e *RealExecutor) runCommand(ctx context.Context, args []string) (bool, str
 
 	e.logger.Debug(fmt.Sprintf("Command output: %s", outputStr))
 	return true, outputStr, nil
+}
+
+// extractPodNameFromDebugOutput extracts the pod name from kubectl debug output
+// Example input: "Creating debugging pod node-debugger-rsb4-q4cxv with container debugger on node rsb4."
+// Example output: "node-debugger-rsb4-q4cxv"
+func (e *RealExecutor) extractPodNameFromDebugOutput(output string) string {
+	// Use regex to extract pod name from kubectl debug output
+	regex := regexp.MustCompile(`Creating debugging pod ([a-zA-Z0-9-]+) with container`)
+	matches := regex.FindStringSubmatch(output)
+	if len(matches) >= 2 {
+		return matches[1]
+	}
+	return ""
+}
+
+// waitForPodLogsWithTimeout waits for a pod to complete and returns its logs
+func (e *RealExecutor) waitForPodLogsWithTimeout(ctx context.Context, podName string, timeout time.Duration) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	// Wait for pod to reach a terminal state (Succeeded or Failed)
+	for {
+		select {
+		case <-ctx.Done():
+			return "", fmt.Errorf("timeout waiting for pod %s to complete", podName)
+		default:
+			// Check pod status
+			args := []string{"get", "pod", podName, "-o", "jsonpath={.status.phase}"}
+			success, phase, err := e.runCommand(ctx, args)
+			if err != nil {
+				// Pod might not exist yet, wait a bit
+				time.Sleep(e.pollingInterval)
+				continue
+			}
+
+			if success && (phase == "Succeeded" || phase == "Failed") {
+				// Pod completed, get logs
+				logArgs := []string{"logs", podName}
+				logSuccess, logs, logErr := e.runCommand(ctx, logArgs)
+				if logErr != nil {
+					return "", fmt.Errorf("failed to get logs from pod %s: %w", podName, logErr)
+				}
+
+				if !logSuccess {
+					return "", fmt.Errorf("failed to retrieve logs from pod %s", podName)
+				}
+
+				if phase == "Failed" {
+					return logs, fmt.Errorf("pod %s failed: %s", podName, logs)
+				}
+
+				return logs, nil
+			}
+
+			// Wait before checking again
+			time.Sleep(e.pollingInterval)
+		}
+	}
 }
