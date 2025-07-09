@@ -250,14 +250,6 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			totalErrors = append(totalErrors, fmt.Errorf("VLAN configuration failed: %w", err))
 		} else {
-			// Verify VLANs if not in dry run mode and operation was apply
-			if !tools.Nvlan.DryRun && applyOp {
-				_, verifyErr := vlanService.VerifyVLANs(ctx, bundle.VLANs)
-				if verifyErr != nil {
-					logger.Warn(fmt.Sprintf("VLAN verification failed: %v", verifyErr))
-				}
-			}
-
 			// Handle any operation errors
 			if len(results.Errors) > 0 {
 				logger.Error("Some VLAN operations failed:")
