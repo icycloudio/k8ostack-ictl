@@ -19,6 +19,12 @@ type Executor interface {
 
 	// ExecNodeCommand executes a command on a specific node
 	ExecNodeCommand(ctx context.Context, nodeName, command string) (bool, string, error)
+
+	// GetPods retrieves pods with optional filtering
+	GetPods(ctx context.Context, fieldSelector, labelSelector string) (bool, string, error)
+
+	// DeletePod deletes a specific pod
+	DeletePod(ctx context.Context, podName string) (bool, string, error)
 }
 
 // DryRunExecutor extends Executor with dry-run functionality

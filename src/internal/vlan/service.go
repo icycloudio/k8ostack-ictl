@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -409,28 +408,41 @@ func (vs *VLANService) getAllNodesFromConfig(cfg *config.NodeVLANConf) map[strin
 
 // cleanupDebugPods automatically cleans up debug pods after VLAN operations
 func (vs *VLANService) cleanupDebugPods(ctx context.Context) {
-	// FIX: Respect dry-run mode for cleanup operations
-	if vs.options.DryRun {
-		vs.options.Logger.Info("🧹 DRY RUN: Would clean up debug pods...")
+	vs.options.Logger.Info("🧹 Cleaning up debug pods...")
+
+	// Give pods a moment to transition to final status
+	time.Sleep(3 * time.Second)
+
+	// Step 1: Get ALL pods (no status filtering - match old behavior)
+	success, output, err := vs.kubectl.GetPods(ctx, "", "")
+	if err != nil || !success {
+		vs.options.Logger.Warn(fmt.Sprintf("Failed to get pods: %v", err))
 		return
 	}
 
-	vs.options.Logger.Info("🧹 Cleaning up debug pods...")
-
-	// Give pods a moment to transition to Completed status
-	time.Sleep(3 * time.Second)
-
-	// Use the exact same command that works in our justfile (without error suppression)
-	cmd := exec.CommandContext(ctx, "sh", "-c", "kubectl get pods | grep node-debugger | awk '{print $1}' | xargs kubectl delete pod")
-	output, err := cmd.CombinedOutput()
-
-	if err != nil {
-		vs.options.Logger.Warn(fmt.Sprintf("Cleanup failed with error: %v", err))
-	} else {
-		vs.options.Logger.Info("✅ Debug pods cleaned up automatically")
+	// Step 2: Filter ONLY by our specific name pattern (like old grep did)
+	podNames := strings.Split(output, "\n")
+	var debugPods []string
+	for _, podName := range podNames {
+		if strings.Contains(podName, "node-debugger") {
+			debugPods = append(debugPods, strings.TrimPrefix(podName, "pod/"))
+		}
 	}
 
-	if vs.options.Verbose && len(output) > 0 {
-		vs.options.Logger.Debug(fmt.Sprintf("Cleanup output: %s", strings.TrimSpace(string(output))))
+	// Step 3: Delete each debug pod (using generic building block!)
+	deletedCount := 0
+	for _, podName := range debugPods {
+		success, _, err := vs.kubectl.DeletePod(ctx, podName)
+		if err != nil {
+			vs.options.Logger.Warn(fmt.Sprintf("Failed to delete pod %s: %v", podName, err))
+		} else if success {
+			deletedCount++
+		}
+	}
+
+	if deletedCount > 0 {
+		vs.options.Logger.Info(fmt.Sprintf("✅ Cleaned up %d debug pods", deletedCount))
+	} else {
+		vs.options.Logger.Info("✅ No debug pods to clean up")
 	}
 }

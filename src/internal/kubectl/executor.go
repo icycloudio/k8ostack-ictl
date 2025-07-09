@@ -86,6 +86,33 @@ func (e *RealExecutor) ExecNodeCommand(ctx context.Context, nodeName, command st
 	return e.runCommand(ctx, args)
 }
 
+// GetPods retrieves pods with optional filtering
+func (e *RealExecutor) GetPods(ctx context.Context, fieldSelector, labelSelector string) (bool, string, error) {
+	args := []string{"get", "pods", "-o", "name"}
+
+	if fieldSelector != "" {
+		args = append(args, "--field-selector", fieldSelector)
+	}
+	if labelSelector != "" {
+		args = append(args, "--selector", labelSelector)
+	}
+
+	// No dry-run logic here - this is just a GET operation
+	return e.runCommand(ctx, args)
+}
+
+// DeletePod deletes a specific pod
+func (e *RealExecutor) DeletePod(ctx context.Context, podName string) (bool, string, error) {
+	args := []string{"delete", "pod", podName}
+
+	if e.dryRun {
+		e.logger.Debug(fmt.Sprintf("DRY RUN: Would run: kubectl %s", strings.Join(args, " ")))
+		return true, fmt.Sprintf("pod/%s deleted", podName), nil
+	}
+
+	return e.runCommand(ctx, args)
+}
+
 // runCommand executes a kubectl command
 func (e *RealExecutor) runCommand(ctx context.Context, args []string) (bool, string, error) {
 	e.logger.Debug(fmt.Sprintf("Running: kubectl %s", strings.Join(args, " ")))
