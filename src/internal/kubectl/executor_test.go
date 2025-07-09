@@ -12,6 +12,163 @@ import (
 )
 
 // mockLogger implements the Logger interface for testing
+// TestExecNodeCommand tests command execution on node
+// WHY: Executing commands on nodes is crucial for node management and requires validation of implementation
+func TestExecNodeCommand(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		nodeName    string
+		command     string
+		dryRun      bool
+		expectDryRun bool
+	}{
+		{
+			"exec_command_production_mode",
+			"Production mode should execute actual kubectl command",
+			"rsb2",
+			"uptime",
+			false,
+			false,
+		},
+		{
+			"exec_command_dry_run_mode",
+			"Dry-run mode should simulate execution without running kubectl",
+			"rsb3",
+			"ls -la",
+			true,
+			true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := newMockLogger()
+			executor := NewExecutor(logger)
+			executor.SetDryRun(tt.dryRun)
+			ctx := context.Background()
+
+			success, output, _ := executor.ExecNodeCommand(ctx, tt.nodeName, tt.command)
+
+			if tt.expectDryRun {
+				assert.True(t, success, "Dry-run should succeed")
+				assert.Contains(t, output, "Command would be executed on node", "Dry-run should log simulated output")
+			} else {
+				assert.NotEmpty(t, output, "Should have output (success or failure)")
+			}
+
+			debugMessage := strings.Join(logger.debugMessages, " ")
+			assert.Contains(t, debugMessage, "kubectl debug node", "Should log kubectl command")
+			assert.Contains(t, debugMessage, tt.nodeName, "Should log node name")
+			assert.Contains(t, debugMessage, tt.command, "Should log command")
+		})
+	}
+}
+
+// TestGetPods tests pod retrieval with optional filtering
+// WHY: Retrieving pods is essential for monitoring and management
+func TestGetPods(t *testing.T) {
+	tests := []struct {
+		name          string
+		description   string
+		fieldSelector string
+		labelSelector string
+	}{
+		{
+			"get_pods_no_filter",
+			"Should retrieve all pods without any filter",
+			"",
+			"",
+		},
+		{
+			"get_pods_with_field_selector",
+			"Should retrieve pods matching field selector",
+			"spec.nodeName=rsb2",
+			"",
+		},
+		{
+			"get_pods_with_label_selector",
+			"Should retrieve pods matching label selector",
+			"",
+			"app=nginx",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := newMockLogger()
+			executor := NewExecutor(logger)
+			ctx := context.Background()
+
+			_, output, _ := executor.GetPods(ctx, tt.fieldSelector, tt.labelSelector)
+
+			// Note: GetPods will fail in test environment without kubectl/cluster
+			// Command behavior depends on kubectl availability and cluster access
+			// We verify the interface works regardless of success/failure
+			_ = output // Test interface behavior, not kubectl availability
+
+			debugMessage := strings.Join(logger.debugMessages, " ")
+			assert.Contains(t, debugMessage, "kubectl get pods", "Should log kubectl command")
+			if tt.fieldSelector != "" {
+				assert.Contains(t, debugMessage, tt.fieldSelector, "Should include field selector")
+			}
+			if tt.labelSelector != "" {
+				assert.Contains(t, debugMessage, tt.labelSelector, "Should include label selector")
+			}
+		})
+	}
+}
+
+// TestDeletePod tests pod deletion
+// WHY: Deleting pods is necessary for cleaning up failed or old deployments
+func TestDeletePod(t *testing.T) {
+	tests := []struct {
+		name        string
+		description string
+		podName     string
+		dryRun      bool
+		expectDryRun bool
+	}{
+		{
+			"delete_pod_production_mode",
+			"Production mode should execute actual kubectl command to delete pod",
+			"nginx-deployment-abc123",
+			false,
+			false,
+		},
+		{
+			"delete_pod_dry_run_mode",
+			"Dry-run mode should simulate pod deletion without actual execution",
+			"nginx-deployment-xyz789",
+			true,
+			true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := newMockLogger()
+			executor := NewExecutor(logger)
+			executor.SetDryRun(tt.dryRun)
+			ctx := context.Background()
+
+			success, output, _ := executor.DeletePod(ctx, tt.podName)
+
+			if tt.expectDryRun {
+				assert.True(t, success, "Dry-run should succeed")
+				assert.Contains(t, output, "deleted", "Dry-run should log simulated output")
+			} else {
+				assert.NotEmpty(t, output, "Should have output (success or failure)")
+			}
+
+			debugMessage := strings.Join(logger.debugMessages, " ")
+			assert.Contains(t, debugMessage, "kubectl delete pod", "Should log kubectl command")
+			assert.Contains(t, debugMessage, tt.podName, "Should log pod name")
+		})
+	}
+}
+
+// mockLogger implements the Logger interface for testing
 type mockLogger struct {
 	debugMessages []string
 	infoMessages  []string
