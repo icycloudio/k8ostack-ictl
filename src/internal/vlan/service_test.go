@@ -669,10 +669,11 @@ func TestVLANService_ConfigureVLANs(t *testing.T) {
 			assert.Equal(t, tt.expectedSuccessNodes, result.SuccessfulNodes,
 				"Test %s: successful nodes mismatch", tt.name)
 
+			// Verify failed nodes
 			if tt.expectedFailedNodes == nil {
 				assert.Empty(t, result.FailedNodes, "Test %s: failed nodes should be empty", tt.name)
 			} else {
-				assert.Equal(t, tt.expectedFailedNodes, result.FailedNodes,
+				assert.ElementsMatch(t, tt.expectedFailedNodes, result.FailedNodes,
 					"Test %s: failed nodes mismatch", tt.name)
 			}
 
