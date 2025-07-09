@@ -1,5 +1,5 @@
-// Package labeler provides mock implementations for testing
-package labeler
+// Package vlan provides mock implementations for testing
+package vlan
 
 import (
 	"context"
@@ -7,8 +7,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockDryRunExecutor mocks the kubectl.DryRunExecutor interface
-// This enables surgical testing of business logic without external dependencies
+// MockDryRunExecutor mocks the kubectl.DryRunExecutor interface for VLAN testing
 type MockDryRunExecutor struct {
 	mock.Mock
 	dryRun bool
@@ -126,13 +125,11 @@ func (m *MockLogger) Clear() {
 }
 
 // NewMockDryRunExecutor creates a new mock executor for testing
-// WHY: Isolates business logic from kubectl operations for fast, reliable unit tests
 func NewMockDryRunExecutor() *MockDryRunExecutor {
 	return &MockDryRunExecutor{}
 }
 
 // NewMockLogger creates a new mock logger for testing
-// WHY: Enables verification of logging behavior and structured message capture
 func NewMockLogger() *MockLogger {
 	return &MockLogger{
 		Messages: make([]LogMessage, 0),

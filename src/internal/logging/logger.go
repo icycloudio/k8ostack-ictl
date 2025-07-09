@@ -50,7 +50,9 @@ func NewFileLogger(logDir string, verbose bool) (*FileLogger, error) {
 // Close closes the log file
 func (l *FileLogger) Close() error {
 	if l.logFile != nil {
-		return l.logFile.Close()
+		err := l.logFile.Close()
+		l.logFile = nil // Set to nil to prevent double closing
+		return err
 	}
 	return nil
 }

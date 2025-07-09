@@ -97,7 +97,16 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return config.GenerateMultiCRDSampleConfig("sample-multi-config.yaml")
 	}
 
-	// Config-based mode - check FIRST to match test expectations
+	// Get operation flags early for validation
+	applyOp, _ := cmd.Flags().GetBool("apply")
+	deleteOp, _ := cmd.Flags().GetBool("delete")
+
+	// Validate operation flags BEFORE other checks
+	if applyOp && deleteOp {
+		return fmt.Errorf("cannot specify both --apply and --delete operations")
+	}
+
+	// Config-based mode - check after flag validation
 	if configFile == "" {
 		return fmt.Errorf("configuration file is required. Use --config to specify a YAML file, or --generate-config to create a sample")
 	}
@@ -108,15 +117,6 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
 	defer logger.Close()
-
-	// Get operation flags
-	applyOp, _ := cmd.Flags().GetBool("apply")
-	deleteOp, _ := cmd.Flags().GetBool("delete")
-
-	// Validate operation flags
-	if applyOp && deleteOp {
-		return fmt.Errorf("cannot specify both --apply and --delete operations")
-	}
 
 	// Require explicit operation - no dangerous defaults!
 	if !applyOp && !deleteOp {
