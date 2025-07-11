@@ -43,6 +43,7 @@ logs/*.log
 sample*.yaml
 *.tmp 
 prod-infra.yaml
+nethealthcheck.yaml
 
 # Other
-doc_archive/
+docs/net*

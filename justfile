@@ -12,7 +12,8 @@ src_dir := "src"
 build_dir := "dist"
 config_file := "prod-infra.yaml"
 sample_multi_config := "sample-multi-config.yaml"
-verbose_flag := "--verbose"  # Set to empty space to disable verbose output, use --verbose to enable
+verbose_flag := ""  # Set to empty space to disable verbose output, use --verbose to enable
+# verbose_flag := "--verbose"
 head_n_count := "20"
 
 # Build the application with multi-CRD support

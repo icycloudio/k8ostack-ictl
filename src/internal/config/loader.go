@@ -31,8 +31,20 @@ func LoadConfig(configPath string) (Config, error) {
 	switch kindDetector.Kind {
 	case "NodeLabelConf":
 		return loadNodeLabelConf(data)
+	case "NodeVLANConf":
+		cfg, err := loadNodeVLANConf(data)
+		if err != nil {
+			return nil, err
+		}
+		return cfg, nil
+	case "NodeTestConf":
+		cfg, err := loadNodeTestConf(data)
+		if err != nil {
+			return nil, err
+		}
+		return cfg, nil
 	default:
-		return nil, fmt.Errorf("unsupported config kind '%s'. Expected: NodeLabelConf", kindDetector.Kind)
+		return nil, fmt.Errorf("unsupported config kind '%s'. Expected: NodeLabelConf, NodeVLANConf, or NodeTestConf", kindDetector.Kind)
 	}
 }
 

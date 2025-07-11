@@ -17,9 +17,19 @@ type NodeRole struct {
 
 // ToolConfig represents tool-specific configuration
 type ToolConfig struct {
+	// Common options
 	DryRun        bool   `json:"dryRun,omitempty" yaml:"dryRun,omitempty"`
 	ValidateNodes bool   `json:"validateNodes,omitempty" yaml:"validateNodes,omitempty"`
 	LogLevel      string `json:"logLevel,omitempty" yaml:"logLevel,omitempty"`
+	
+	// VLAN-specific options
+	ValidateConnectivity bool `json:"validateConnectivity,omitempty" yaml:"validateConnectivity,omitempty"`
+	PersistentConfig     bool `json:"persistentConfig,omitempty" yaml:"persistentConfig,omitempty"`
+	
+	// NetHealthCheck-specific options
+	Parallel     bool   `json:"parallel,omitempty" yaml:"parallel,omitempty"`
+	Retries      int    `json:"retries,omitempty" yaml:"retries,omitempty"`
+	OutputFormat string `json:"outputFormat,omitempty" yaml:"outputFormat,omitempty"`
 }
 
 // NodeLabelSpec contains the specification for node labeling operations

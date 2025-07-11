@@ -12,7 +12,7 @@ A unified, multi-CRD infrastructure automation tool for Kubernetes OpenStack dep
 
 ### **Supported CRD Types**
 - 🏷️ **NodeLabelConf** - Kubernetes node labeling and role management ✅ **Active**
-- 🌐 **NodeVLANConf** - VLAN configuration and network topology ✅ **Implemented & Tested**
+- 🌐 **NodeVLANConf** - VLAN configuration and network topology ✅  **Active**
 - 🧪 **NodeTestConf** - Network connectivity testing and validation 🔄 **Ready for implementation**
 
 ## ✨ Features

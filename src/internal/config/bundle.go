@@ -153,6 +153,14 @@ func NewSingleConfigBundle(cfg Config) *ConfigBundle {
 		bundle.NodeLabels = c
 	case NodeLabelConf:
 		bundle.NodeLabels = &c
+	case *NodeVLANConf:
+		bundle.VLANs = c
+	case NodeVLANConf:
+		bundle.VLANs = &c
+	case *NodeTestConf:
+		bundle.Tests = c
+	case NodeTestConf:
+		bundle.Tests = &c
 	}
 
 	return bundle

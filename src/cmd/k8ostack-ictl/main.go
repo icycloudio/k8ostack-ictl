@@ -11,6 +11,7 @@ import (
 	"k8ostack-ictl/internal/kubectl"
 	"k8ostack-ictl/internal/labeler"
 	"k8ostack-ictl/internal/logging"
+	"k8ostack-ictl/internal/nethealthcheck"
 	"k8ostack-ictl/internal/vlan"
 
 	"github.com/spf13/cobra"
@@ -261,14 +262,73 @@ func runCommand(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Process Tests if present (placeholder for future implementation)
+	// Process Tests if present
 	if bundle.HasTests() {
-		logger.Info("🧪 Test configuration detected - feature coming soon!")
-		logger.Info(fmt.Sprintf("  Found %d connectivity tests in %s",
-			len(bundle.Tests.Spec.Tests), bundle.Tests.GetMetadata().Name))
-		// TODO: Implement test service integration
-		// testService := testing.NewService(...)
-		// results, err := testService.RunTests(ctx, bundle.Tests)
+		logger.Info("🧪 Processing network connectivity tests...")
+
+		// Initialize kubectl executor
+		kubectlExecutor := kubectl.NewExecutor(logger)
+		// Speed up polling for tests
+		if os.Getenv("KICTL_TEST_MODE") == "true" {
+			kubectlExecutor.SetPollingInterval(0)
+		}
+
+		// Get final tool configuration from the resolved config
+		tools := bundle.Tests.GetTools()
+
+		// Initialize network health check service with resolved configuration
+		// Pass VLAN config if available for network-to-IP mapping
+		var testService nethealthcheck.Service
+		if bundle.HasVLANs() {
+			testService = nethealthcheck.NewServiceWithVLAN(kubectlExecutor, nethealthcheck.Options{
+				DryRun:            tools.Ntest.DryRun,
+				Verbose:           verbose, // CLI verbose always applies
+				Parallel:          tools.Ntest.Parallel,    // Use config value
+				Retries:           tools.Ntest.Retries,     // Use config value
+				OutputFormat:      tools.Ntest.OutputFormat, // Use config value
+				TimeoutDefault:    30,      // Default timeout in seconds
+				CleanupAfterTests: true,    // Clean up test pods
+				OpenstackProfiles: []string{"control-plane", "compute", "storage"},
+				Logger:            logger,
+			}, bundle.VLANs)
+		} else {
+			testService = nethealthcheck.NewService(kubectlExecutor, nethealthcheck.Options{
+				DryRun:            tools.Ntest.DryRun,
+				Verbose:           verbose, // CLI verbose always applies
+				Parallel:          tools.Ntest.Parallel,    // Use config value
+				Retries:           tools.Ntest.Retries,     // Use config value
+				OutputFormat:      tools.Ntest.OutputFormat, // Use config value
+				TimeoutDefault:    30,      // Default timeout in seconds
+				CleanupAfterTests: true,    // Clean up test pods
+				OpenstackProfiles: []string{"control-plane", "compute", "storage"},
+				Logger:            logger,
+			})
+		}
+
+		// Execute test operation (tests don't support delete, only run/verify)
+		var results *nethealthcheck.TestResults
+		if deleteOp {
+			// For delete operation, we might want to stop any running tests
+			results, err = testService.StopTests(ctx, bundle.Tests)
+		} else {
+			// For apply operation, run the tests
+			results, err = testService.RunTests(ctx, bundle.Tests)
+		}
+
+		if err != nil {
+			totalErrors = append(totalErrors, fmt.Errorf("network testing failed: %w", err))
+		} else {
+			// Handle any test errors
+			if len(results.Errors) > 0 {
+				logger.Error("Some network tests failed:")
+				for _, testErr := range results.Errors {
+					logger.Error(fmt.Sprintf("  - %v", testErr))
+				}
+				totalErrors = append(totalErrors, fmt.Errorf("network testing completed with %d errors", len(results.Errors)))
+			} else {
+				logger.Info(fmt.Sprintf("✅ All %d network tests completed successfully", results.SuccessfulTests))
+			}
+		}
 	}
 
 	// Summary
