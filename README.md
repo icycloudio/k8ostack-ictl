@@ -2,18 +2,20 @@
 
 **Modern Kubernetes OpenStack Infrastructure Control Platform**
 
+> ⚠️ **ALPHA SOFTWARE** - This project is under active development towards version 0.1.0. Features are being implemented and APIs may change. Not recommended for production use yet.
+
 A unified, multi-CRD infrastructure automation tool for Kubernetes OpenStack deployments. Control node labeling, VLAN configuration, and network testing through a single, powerful CLI with global precedence and comprehensive validation.
 
 ## 🎯 Overview
 
 `k8ostack-ictl` (command: `kictl`) is a next-generation infrastructure control platform that manages complex Kubernetes OpenStack deployments through a unified multi-CRD architecture. It supports single and multi-document YAML configurations with global CLI precedence across all services.
 
-**🏆 Production-Ready with 80%+ Test Coverage** - Enterprise-grade reliability with comprehensive test coverage across all packages and robust error handling.
+**🚧 Alpha Development Status** - Actively progressing towards v0.1.0 with growing test coverage and feature implementation. See [Development Status](#-development-status) for current progress.
 
 ### **Supported CRD Types**
 - 🏷️ **NodeLabelConf** - Kubernetes node labeling and role management ✅ **Active**
-- 🌐 **NodeVLANConf** - VLAN configuration and network topology ✅  **Active**
-- 🧪 **NodeTestConf** - Network connectivity testing and validation 🔄 **Ready for implementation**
+- 🌐 **NodeVLANConf** - VLAN configuration and network topology ✅ **Active**
+- 🧪 **NodeTestConf** - Network connectivity testing and validation ⚡ **In Development**
 
 ## ✨ Features
 
@@ -215,20 +217,44 @@ just demo               # Full architecture demo
 **CRD Kinds:**
 - `NodeLabelConf` - Node labeling and role management ✅ **Active**
 - `NodeVLANConf` - VLAN configuration and network topology ✅ **Active**
-- `NodeTestConf` - Network connectivity testing 🔄 **Ready**
+- `NodeTestConf` - Network connectivity testing ⚡ **In Development**
 
 **Tool Configurations:**
 - `tools.nlabel` - Node labeling service ✅ **Active**
 - `tools.nvlan` - VLAN service ✅ **Active**
-- `tools.ntest` - Testing service 🔄 **Ready**
+- `tools.ntest` - Testing service ⚡ **In Development**
 
-## 📊 Status & Roadmap
+## 📊 Development Status
 
-**✅ Completed (v1.0):**
-Multi-CRD architecture • Node labeling • VLAN configuration • Global CLI precedence • Multi-document YAML • Comprehensive validation & logging • Robust error handling
+**Current Version:** Alpha (targeting v0.1.0)
 
-**🔄 Next Phase:**
-Network testing service • Enhanced templates • Advanced rollback • Performance optimizations
+**✅ Implemented & Tested:**
+- Multi-CRD architecture with unified CLI
+- NodeLabelConf: Complete node labeling and role management
+- NodeVLANConf: VLAN configuration and network topology
+- Global CLI precedence across all services
+- Multi-document YAML configuration support
+- Comprehensive validation and structured logging
+- Robust error handling and dry-run capabilities
+
+**⚡ Currently In Development:**
+- NodeTestConf: Network connectivity testing service
+- Enhanced test coverage and validation
+- Performance optimizations and reliability improvements
+- Documentation and example refinements
+
+**🎯 Roadmap to v0.1.0:**
+- Complete network testing implementation
+- Comprehensive integration testing
+- Performance benchmarking
+- Production-ready documentation
+- API stabilization
+
+**🔄 Post v0.1.0 Plans:**
+- Enhanced templates and configuration generators
+- Advanced rollback capabilities
+- High availability testing scenarios
+- Extended OpenStack service integrations
 
 ## 🛠️ Prerequisites
 
@@ -242,6 +268,8 @@ MIT License - see LICENSE file for details.
 
 ## 🤝 Contributing
 
+**We welcome contributions!** This project is actively developed and we're working towards v0.1.0.
+
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Ensure all tests pass (`just test`)
@@ -249,8 +277,19 @@ MIT License - see LICENSE file for details.
 5. Push to the branch (`git push origin feature/amazing-feature`)
 6. Open a Pull Request
 
+**Development Focus Areas:**
+- Network testing service implementation
+- Test coverage improvements
+- Documentation and examples
+- Performance optimizations
+- Bug fixes and reliability improvements
+
 ---
 
 **k8ostack-ictl** - Modern Kubernetes OpenStack infrastructure control made unified and powerful.
 
-*Built with ❤️ for production Kubernetes OpenStack deployments* 
+*Built with ❤️ for production Kubernetes OpenStack deployments*
+
+---
+
+**⚠️ Alpha Software Notice:** This project is under active development. While we're making significant progress towards v0.1.0, please expect API changes and use with caution in production environments. Star ⭐ the project to follow our progress!
