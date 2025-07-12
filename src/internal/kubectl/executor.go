@@ -106,9 +106,17 @@ func (e *RealExecutor) ExecNodeCommand(ctx context.Context, nodeName, command st
 	}
 
 	// Wait for pod to complete and get logs
-	logOutput, err := e.waitForPodLogsWithTimeout(ctx, podName, 30*time.Second)
+	logOutput, err := e.waitForPodLogsWithTimeout(ctx, podName, 60*time.Second)
 	if err != nil {
 		return false, logOutput, err
+	}
+
+	// Determine success based on ping results
+	// For ping commands, success is determined by whether packets were received
+	if strings.Contains(command, "ping") {
+		// Check if ping was successful (packets received)
+		pingSuccess := !strings.Contains(logOutput, "0 received, 100% packet loss")
+		return pingSuccess, logOutput, nil
 	}
 
 	return true, logOutput, nil
@@ -139,6 +147,176 @@ func (e *RealExecutor) DeletePod(ctx context.Context, podName string) (bool, str
 	}
 
 	return e.runCommand(ctx, args)
+}
+
+// GetAllNodes retrieves all nodes in the cluster
+func (e *RealExecutor) GetAllNodes(ctx context.Context) (bool, string, error) {
+	// No dry-run logic here - this is just a GET operation
+	return e.runCommand(ctx, []string{"get", "nodes", "-o", "name"})
+}
+
+// GetNodesByLabel retrieves nodes using a specific label selector
+func (e *RealExecutor) GetNodesByLabel(ctx context.Context, labelSelector string) (bool, string, error) {
+	args := []string{"get", "nodes", "-o", "name"}
+	
+	if labelSelector != "" {
+		args = append(args, "-l", labelSelector)
+	}
+	
+	// No dry-run logic here - this is just a GET operation
+	return e.runCommand(ctx, args)
+}
+
+// GetNodeRole retrieves node role based on labels and analysis
+func (e *RealExecutor) GetNodeRole(ctx context.Context, nodeName string) (string, error) {
+	// Get node labels first
+	success, output, err := e.GetNodeLabels(ctx, nodeName)
+	if err != nil || !success {
+		return "", fmt.Errorf("failed to get node labels for %s: %w", nodeName, err)
+	}
+	
+	// Analyze labels to determine role
+	role := e.analyzeNodeRole(output)
+	return role, nil
+}
+
+// analyzeNodeRole determines node role from label output
+func (e *RealExecutor) analyzeNodeRole(labelOutput string) string {
+	// Check for standard Kubernetes node roles
+	if strings.Contains(labelOutput, "node-role.kubernetes.io/control-plane") {
+		return "control-plane"
+	}
+	if strings.Contains(labelOutput, "node-role.kubernetes.io/master") {
+		return "control-plane"
+	}
+	
+	// Check for OpenStack-specific roles
+	if strings.Contains(labelOutput, "openstack-role=storage") {
+		return "storage"
+	}
+	if strings.Contains(labelOutput, "openstack-role=compute") {
+		return "compute"
+	}
+	if strings.Contains(labelOutput, "openstack-role=control-plane") {
+		return "control-plane"
+	}
+	
+	// Default to worker if no specific role found
+	return "worker"
+}
+
+// DiscoverClusterState returns comprehensive cluster overview
+func (e *RealExecutor) DiscoverClusterState(ctx context.Context) (map[string]interface{}, error) {
+	state := make(map[string]interface{})
+	
+	// Get all nodes
+	success, nodesOutput, err := e.GetAllNodes(ctx)
+	if err != nil || !success {
+		return nil, fmt.Errorf("failed to get cluster nodes: %w", err)
+	}
+	
+	// Parse node list
+	nodeNames := strings.Split(strings.TrimSpace(nodesOutput), "\n")
+	nodeCount := len(nodeNames)
+	if nodeNames[0] == "" {
+		nodeCount = 0
+	}
+	
+	// Count roles
+	roleCounts := make(map[string]int)
+	for _, nodeName := range nodeNames {
+		if nodeName == "" {
+			continue
+		}
+		// Strip "node/" prefix if present
+		cleanNodeName := strings.TrimPrefix(nodeName, "node/")
+		role, _ := e.GetNodeRole(ctx, cleanNodeName)
+		roleCounts[role]++
+	}
+	
+	state["total_nodes"] = nodeCount
+	state["node_roles"] = roleCounts
+	state["nodes"] = nodeNames
+	
+	return state, nil
+}
+
+// DiscoverNodeVLANs detects VLAN configuration on a specific node
+func (e *RealExecutor) DiscoverNodeVLANs(ctx context.Context, nodeName string) (bool, string, error) {
+	// Use ExecNodeCommand to run VLAN discovery on the node
+	command := "ip link show type vlan"
+	
+	if e.dryRun {
+		e.logger.Debug(fmt.Sprintf("DRY RUN: Would discover VLANs on node %s: %s", nodeName, command))
+		return true, fmt.Sprintf("DRY RUN: VLAN discovery on node %s", nodeName), nil
+	}
+	
+	return e.ExecNodeCommand(ctx, nodeName, command)
+}
+
+// DiscoverAllVLANs maps VLAN configurations across all nodes
+func (e *RealExecutor) DiscoverAllVLANs(ctx context.Context) (map[string]string, error) {
+	vlanMap := make(map[string]string)
+	
+	// Get all nodes first
+	success, nodesOutput, err := e.GetAllNodes(ctx)
+	if err != nil || !success {
+		return nil, fmt.Errorf("failed to get cluster nodes: %w", err)
+	}
+	
+	// Parse node list
+	nodeNames := strings.Split(strings.TrimSpace(nodesOutput), "\n")
+	
+	// Discover VLANs on each node
+	for _, nodeName := range nodeNames {
+		if nodeName == "" {
+			continue
+		}
+		
+		// Strip "node/" prefix if present
+		cleanNodeName := strings.TrimPrefix(nodeName, "node/")
+		
+		success, vlanOutput, err := e.DiscoverNodeVLANs(ctx, cleanNodeName)
+		if err != nil {
+			e.logger.Warn(fmt.Sprintf("Failed to discover VLANs on node %s: %v", cleanNodeName, err))
+			vlanMap[cleanNodeName] = "ERROR"
+			continue
+		}
+		
+		if success {
+			vlanMap[cleanNodeName] = vlanOutput
+		} else {
+			vlanMap[cleanNodeName] = "NO_VLANS"
+		}
+	}
+	
+	return vlanMap, nil
+}
+
+// GetNodeNetworkInfo retrieves network interface information from a node
+func (e *RealExecutor) GetNodeNetworkInfo(ctx context.Context, nodeName string) (bool, string, error) {
+	// Get comprehensive network information
+	command := "ip addr show && echo '---ROUTES---' && ip route show"
+	
+	if e.dryRun {
+		e.logger.Debug(fmt.Sprintf("DRY RUN: Would get network info on node %s: %s", nodeName, command))
+		return true, fmt.Sprintf("DRY RUN: Network info for node %s", nodeName), nil
+	}
+	
+	return e.ExecNodeCommand(ctx, nodeName, command)
+}
+
+// GetNodeHardwareInfo gets basic hardware specifications for node categorization
+func (e *RealExecutor) GetNodeHardwareInfo(ctx context.Context, nodeName string) (bool, string, error) {
+	// Get CPU, memory, and storage information
+	command := "echo 'CPU:' && lscpu | grep -E '^CPU\\(s\\)|^Model name' && echo 'MEMORY:' && free -h && echo 'STORAGE:' && lsblk"
+	
+	if e.dryRun {
+		e.logger.Debug(fmt.Sprintf("DRY RUN: Would get hardware info on node %s: %s", nodeName, command))
+		return true, fmt.Sprintf("DRY RUN: Hardware info for node %s", nodeName), nil
+	}
+	
+	return e.ExecNodeCommand(ctx, nodeName, command)
 }
 
 // runCommand executes a kubectl command
@@ -204,7 +382,11 @@ func (e *RealExecutor) waitForPodLogsWithTimeout(ctx context.Context, podName st
 				}
 
 				if phase == "Failed" {
-					return logs, fmt.Errorf("pod %s failed: %s", podName, logs)
+					// Check if it's an expected failure (e.g., no ping response for isolation tests)
+					if strings.Contains(logs, "0 received, 100% packet loss") {
+						return logs, nil // Considered a success for isolation
+					}
+					return logs, fmt.Errorf("unexpected pod %s failure: %s", podName, logs)
 				}
 
 				return logs, nil

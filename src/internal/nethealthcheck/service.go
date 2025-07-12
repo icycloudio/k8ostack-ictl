@@ -59,7 +59,13 @@ func (nhs *NetHealthCheckService) processTests(ctx context.Context, cfg *config.
 			results.Errors = append(results.Errors, err)
 			results.FailedTests++
 		} else {
-			if testExecution.ActualSuccess {
+			// Check if test result matches expectation
+			testPassed := testExecution.ActualSuccess == testExecution.ExpectSuccess
+			
+			// Debug logging for final comparison
+			nhs.options.Logger.Debug(fmt.Sprintf("🔍 Test %s final: actualSuccess=%v expectSuccess=%v testPassed=%v", testConfig.Name, testExecution.ActualSuccess, testExecution.ExpectSuccess, testPassed))
+			
+			if testPassed {
 				nhs.options.Logger.Info(fmt.Sprintf("✅ Test %s completed successfully in %v", testConfig.Name, testExecution.Duration))
 				results.SuccessfulTests++
 			} else {
@@ -161,15 +167,23 @@ func (nhs *NetHealthCheckService) executeNetworkTest(ctx context.Context, testCo
 			success, output, err := nhs.executePingTest(ctx, sourceNode, targetIP)
 			allResults = append(allResults, fmt.Sprintf("%s->%s(%s): %s", sourceNode, targetNode, targetIP, output))
 			
+			// Debug logging for ping test results
+			nhs.options.Logger.Debug(fmt.Sprintf("🔍 Ping result: %s->%s success=%v err=%v", sourceNode, targetIP, success, err))
+			
 			if err != nil && firstError == nil {
 				firstError = err
+				nhs.options.Logger.Debug(fmt.Sprintf("🔍 First error captured: %v", err))
 			}
 			
 			if !success {
 				overallSuccess = false
+				nhs.options.Logger.Debug(fmt.Sprintf("🔍 Overall success set to false due to ping failure"))
 			}
 		}
 	}
+
+	// Debug logging for test execution summary
+	nhs.options.Logger.Debug(fmt.Sprintf("🔍 Test %s: overallSuccess=%v expectSuccess=%v firstError=%v", testConfig.Name, overallSuccess, testConfig.ExpectSuccess, firstError))
 
 	// Create test execution result
 	testExecution := &TestExecution{
@@ -201,8 +215,36 @@ func (nhs *NetHealthCheckService) executeNetworkTest(ctx context.Context, testCo
 	return testExecution, nil
 }
 
-// getNodesForNetwork retrieves node names for a given network from VLAN config
+// getNodesForNetwork retrieves node names for a given network using role-based discovery
+// This fixes the false positive issue where control plane nodes were being tested for isolation
 func (nhs *NetHealthCheckService) getNodesForNetwork(networkName string) ([]string, error) {
+	// Map network names to actual node roles for proper test selection
+	roleMapping := map[string]string{
+		"storage": "storage",      // Use dedicated storage nodes (rsb5, rsb6)
+		"api": "control-plane",    // Use control plane nodes (rsb2, rsb3, rsb4)
+		"tenant": "compute",       // Use compute nodes (rsb7, rsb8)
+		"management": "all",       // Management network spans all nodes
+	}
+
+	// Get target role for this network
+	targetRole, exists := roleMapping[networkName]
+	if !exists {
+		// Fallback to VLAN-based selection for unknown networks
+		nhs.options.Logger.Warn(fmt.Sprintf("Unknown network %s, using VLAN-based selection", networkName))
+		return nhs.getNodesForNetworkVLANBased(networkName)
+	}
+
+	// Handle special case for management network (all nodes)
+	if targetRole == "all" {
+		return nhs.getAllNodesFromCluster()
+	}
+
+	// Use role-based discovery to get nodes
+	return nhs.getNodesByRole(targetRole)
+}
+
+// getNodesForNetworkVLANBased provides fallback VLAN-based node selection
+func (nhs *NetHealthCheckService) getNodesForNetworkVLANBased(networkName string) ([]string, error) {
 	if nhs.vlanConfig == nil {
 		return nil, fmt.Errorf("no VLAN configuration available for network mapping")
 	}
@@ -224,6 +266,78 @@ func (nhs *NetHealthCheckService) getNodesForNetwork(networkName string) ([]stri
 	}
 
 	return nodes, nil
+}
+
+// getNodesByRole uses kubectl discovery to get nodes by their actual role labels
+func (nhs *NetHealthCheckService) getNodesByRole(role string) ([]string, error) {
+	// Get all nodes from cluster
+	success, allNodesOutput, err := nhs.kubectl.GetAllNodes(context.Background())
+	if err != nil || !success {
+		return nil, fmt.Errorf("failed to get cluster nodes: %w", err)
+	}
+
+	// Parse node list
+	nodeNames := strings.Split(strings.TrimSpace(allNodesOutput), "\n")
+	var roleNodes []string
+
+	for _, nodeName := range nodeNames {
+		if nodeName == "" {
+			continue
+		}
+		
+		// Strip "node/" prefix if present
+		cleanNodeName := strings.TrimPrefix(nodeName, "node/")
+		
+		// Get role for this node
+		nodeRole, err := nhs.kubectl.GetNodeRole(context.Background(), cleanNodeName)
+		if err != nil {
+			nhs.options.Logger.Warn(fmt.Sprintf("Failed to get role for node %s: %v", cleanNodeName, err))
+			continue
+		}
+		
+		// Add node if role matches and not in exclusion list
+		if nodeRole == role && !nhs.isNodeExcluded(cleanNodeName) {
+			roleNodes = append(roleNodes, cleanNodeName)
+		} else if nodeRole == role && nhs.isNodeExcluded(cleanNodeName) {
+			nhs.options.Logger.Info(fmt.Sprintf("Excluding node %s from tests (in exclusion list)", cleanNodeName))
+		}
+	}
+
+	if len(roleNodes) == 0 {
+		return nil, fmt.Errorf("no nodes found with role %s (after applying exclusions)", role)
+	}
+
+	nhs.options.Logger.Info(fmt.Sprintf("Found %d nodes with role %s: %v", len(roleNodes), role, roleNodes))
+	return roleNodes, nil
+}
+
+// getAllNodesFromCluster gets all nodes for management network tests
+func (nhs *NetHealthCheckService) getAllNodesFromCluster() ([]string, error) {
+	success, allNodesOutput, err := nhs.kubectl.GetAllNodes(context.Background())
+	if err != nil || !success {
+		return nil, fmt.Errorf("failed to get cluster nodes: %w", err)
+	}
+
+	// Parse node list
+	nodeNames := strings.Split(strings.TrimSpace(allNodesOutput), "\n")
+	var cleanNodes []string
+
+	for _, nodeName := range nodeNames {
+		if nodeName == "" {
+			continue
+		}
+		// Strip "node/" prefix if present
+		cleanNodeName := strings.TrimPrefix(nodeName, "node/")
+		
+		// Only include nodes that are not in the exclusion list
+		if !nhs.isNodeExcluded(cleanNodeName) {
+			cleanNodes = append(cleanNodes, cleanNodeName)
+		} else {
+			nhs.options.Logger.Info(fmt.Sprintf("Excluding node %s from management network tests (in exclusion list)", cleanNodeName))
+		}
+	}
+
+	return cleanNodes, nil
 }
 
 // getNodeIPForNetwork retrieves a node's IP address for a given network from VLAN config
@@ -309,4 +423,14 @@ func (nhs *NetHealthCheckService) cleanupTestPods(ctx context.Context) {
 	} else {
 		nhs.options.Logger.Info("✅ No test pods to clean up")
 	}
+}
+
+// isNodeExcluded checks if a node is in the exclusion list
+func (nhs *NetHealthCheckService) isNodeExcluded(nodeName string) bool {
+	for _, excludedNode := range nhs.options.ExcludeNodes {
+		if excludedNode == nodeName {
+			return true
+		}
+	}
+	return false
 }

@@ -27,9 +27,10 @@ type ToolConfig struct {
 	PersistentConfig     bool `json:"persistentConfig,omitempty" yaml:"persistentConfig,omitempty"`
 	
 	// NetHealthCheck-specific options
-	Parallel     bool   `json:"parallel,omitempty" yaml:"parallel,omitempty"`
-	Retries      int    `json:"retries,omitempty" yaml:"retries,omitempty"`
-	OutputFormat string `json:"outputFormat,omitempty" yaml:"outputFormat,omitempty"`
+	Parallel     bool     `json:"parallel,omitempty" yaml:"parallel,omitempty"`
+	Retries      int      `json:"retries,omitempty" yaml:"retries,omitempty"`
+	OutputFormat string   `json:"outputFormat,omitempty" yaml:"outputFormat,omitempty"`
+	ExcludeNodes []string `json:"excludeNodes,omitempty" yaml:"excludeNodes,omitempty"`
 }
 
 // NodeLabelSpec contains the specification for node labeling operations

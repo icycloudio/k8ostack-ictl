@@ -75,6 +75,7 @@ type Options struct {
 	TimeoutDefault       int           // Default timeout in seconds
 	CleanupAfterTests    bool
 	OpenstackProfiles    []string      // e.g., ["control-plane", "compute", "storage"]
+	ExcludeNodes         []string      // List of nodes to exclude from testing
 	Logger               kubectl.Logger
 	TestDelay            time.Duration // For testing - can be set to 0 to skip sleep
 }

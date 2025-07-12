@@ -289,6 +289,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 				TimeoutDefault:    30,      // Default timeout in seconds
 				CleanupAfterTests: true,    // Clean up test pods
 				OpenstackProfiles: []string{"control-plane", "compute", "storage"},
+				ExcludeNodes:      tools.Ntest.ExcludeNodes, // Use config exclusion list
 				Logger:            logger,
 			}, bundle.VLANs)
 		} else {
@@ -301,6 +302,7 @@ func runCommand(cmd *cobra.Command, args []string) error {
 				TimeoutDefault:    30,      // Default timeout in seconds
 				CleanupAfterTests: true,    // Clean up test pods
 				OpenstackProfiles: []string{"control-plane", "compute", "storage"},
+				ExcludeNodes:      tools.Ntest.ExcludeNodes, // Use config exclusion list
 				Logger:            logger,
 			})
 		}

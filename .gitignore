@@ -46,4 +46,4 @@ prod-infra.yaml
 nethealthcheck.yaml
 
 # Other
-docs/net*
+docs/
