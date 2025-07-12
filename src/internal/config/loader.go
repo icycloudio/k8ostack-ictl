@@ -235,9 +235,8 @@ func applyNodeTestDefaults(config NodeTestConf) NodeTestConf {
 		if test.Timeout == 0 {
 			config.Spec.Tests[i].Timeout = 30 // Default 30 seconds
 		}
-		if !test.ExpectSuccess {
-			config.Spec.Tests[i].ExpectSuccess = true // Default expect success
-		}
+		// Note: ExpectSuccess defaults to false (Go default), no need to override
+		// The original logic was backwards and would force false values to true
 	}
 
 	return config
